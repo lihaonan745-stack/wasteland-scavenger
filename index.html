@@ -307,8 +307,8 @@ function beep(freq, dur, type, vol, when = 0, slideTo = 0) {
 }
 function startBGM() {
   // 低频 drone：两只微失谐锯齿波过低通，慢 LFO 呼吸
-  const filt = AC.createBiquadFilter(); filt.type = "lowpass"; filt.frequency.value = 240; filt.Q.value = 0.8;
-  const dg = AC.createGain(); dg.gain.value = 0.045;
+  const filt = AC.createBiquadFilter(); filt.type = "lowpass"; filt.frequency.value = 320; filt.Q.value = 0.8;
+  const dg = AC.createGain(); dg.gain.value = 0.10;
   const o1 = AC.createOscillator(); o1.type = "sawtooth"; o1.frequency.value = 55;
   const o2 = AC.createOscillator(); o2.type = "sawtooth"; o2.frequency.value = 55.6;
   o1.connect(filt); o2.connect(filt); filt.connect(dg); dg.connect(masterGain);
@@ -321,8 +321,8 @@ function startBGM() {
   (function pluck() {
     if (S.sound && !document.hidden) {
       const f = scale[Math.floor(Math.random() * scale.length)];
-      beep(f, 1.8, "triangle", 0.05);
-      if (Math.random() < 0.3) beep(f * 1.5, 1.4, "triangle", 0.025, 0.45);
+      beep(f, 1.8, "triangle", 0.11);
+      if (Math.random() < 0.3) beep(f * 1.5, 1.4, "triangle", 0.055, 0.45);
     }
     setTimeout(pluck, 2200 + Math.random() * 3500);
   })();
