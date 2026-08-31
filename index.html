@@ -141,9 +141,9 @@
 <body>
 <div class="header">
   <h1>废土拾荒<span class="cursor">▌</span></h1>
-  <div class="sysline">WASTELAND-OS // SURVIVOR TERMINAL v1.7</div>
+  <div class="sysline">WASTELAND-OS // SURVIVOR TERMINAL v1.8</div>
 </div>
-<div class="day">第 <span id="day">1</span> 天 · 第 <span id="run">1</span> 次轮回 · 辐尘 <span id="rad">0</span> · <a href="#" id="ach-btn">成就</a> · <a href="#" id="chron-btn">编年史</a> · <a href="#" id="reset">重开</a></div>
+<div class="day">第 <span id="day">1</span> 天 · 第 <span id="run">1</span> 次轮回 · 辐尘 <span id="rad">0</span> · <a href="#" id="ach-btn">成就</a> · <a href="#" id="chron-btn">编年史</a> · <a href="#" id="snd-btn">🔊</a> · <a href="#" id="reset">重开</a></div>
 
 <div class="resources">
   <div class="res"><div class="res-head"><span class="icon">🧍</span><span class="lbl">幸存者</span></div><div class="val" id="v-survivor">3</div><div class="rate">人口</div></div>
@@ -233,6 +233,7 @@ let S = {
   ach: {},
   shop: { plow: false, pump: false, dog: false, pack: false, fridge: false, radio2: false },
   tutorial: 1,
+  sound: true,
   eventCd: 45,
   lastTick: Date.now(),
 };
@@ -278,6 +279,75 @@ const ZONES = [
 ];
 
 function fmt(n) { return n >= 10000 ? (n / 1000).toFixed(1) + "k" : Math.floor(n); }
+
+// ===== 音频系统（Web Audio 合成，零素材文件） =====
+let AC = null, masterGain = null;
+function audioInit() {
+  if (AC || !S.sound) return;
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = AC.createGain();
+    masterGain.gain.value = 0.6;
+    masterGain.connect(AC.destination);
+    startBGM();
+  } catch (e) {}
+}
+function beep(freq, dur, type, vol, when = 0, slideTo = 0) {
+  if (!AC || !S.sound) return;
+  const t = AC.currentTime + when;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(30, slideTo), t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(masterGain);
+  o.start(t); o.stop(t + dur + 0.05);
+}
+function startBGM() {
+  // 低频 drone：两只微失谐锯齿波过低通，慢 LFO 呼吸
+  const filt = AC.createBiquadFilter(); filt.type = "lowpass"; filt.frequency.value = 240; filt.Q.value = 0.8;
+  const dg = AC.createGain(); dg.gain.value = 0.045;
+  const o1 = AC.createOscillator(); o1.type = "sawtooth"; o1.frequency.value = 55;
+  const o2 = AC.createOscillator(); o2.type = "sawtooth"; o2.frequency.value = 55.6;
+  o1.connect(filt); o2.connect(filt); filt.connect(dg); dg.connect(masterGain);
+  o1.start(); o2.start();
+  const lfo = AC.createOscillator(); lfo.frequency.value = 0.06;
+  const lg = AC.createGain(); lg.gain.value = 100;
+  lfo.connect(lg); lg.connect(filt.frequency); lfo.start();
+  // A 小调五声随机拨弦，稀疏落雨感
+  const scale = [220, 261.6, 293.7, 329.6, 392, 440, 523.3];
+  (function pluck() {
+    if (S.sound && !document.hidden) {
+      const f = scale[Math.floor(Math.random() * scale.length)];
+      beep(f, 1.8, "triangle", 0.05);
+      if (Math.random() < 0.3) beep(f * 1.5, 1.4, "triangle", 0.025, 0.45);
+    }
+    setTimeout(pluck, 2200 + Math.random() * 3500);
+  })();
+}
+const sfx = {
+  click:    () => beep(880, 0.04, "square", 0.018),
+  harvest:  () => { beep(659, 0.12, "triangle", 0.08); beep(880, 0.28, "triangle", 0.08, 0.09); },
+  mission:  () => beep(440, 0.28, "sine", 0.05, 0, 180),
+  good:     () => { beep(523, 0.1, "triangle", 0.07); beep(659, 0.1, "triangle", 0.07, 0.1); beep(784, 0.24, "triangle", 0.07, 0.2); },
+  bad:      () => { beep(110, 0.3, "sawtooth", 0.08); beep(92, 0.4, "sawtooth", 0.06, 0.16); },
+  chime:    () => { beep(440, 0.5, "sine", 0.05); beep(554, 0.65, "sine", 0.04, 0.16); },
+  ach:      () => [660, 880, 990, 1320].forEach((f, i) => beep(f, 0.16, "triangle", 0.06, i * 0.09)),
+  prestige: () => beep(220, 1.3, "sine", 0.08, 0, 880),
+};
+// 浏览器要求首次交互后才能出声：全局监听
+document.addEventListener("pointerdown", e => {
+  audioInit();
+  if (AC && AC.state === "suspended") AC.resume();
+  const b = e.target && e.target.closest && e.target.closest("button");
+  if (b && S.sound) sfx.click();
+});
+document.addEventListener("visibilitychange", () => {
+  if (!AC) return;
+  if (document.hidden) AC.suspend(); else if (S.sound) AC.resume();
+});
 
 // ===== 补产引擎：离线/后台统一走这里（50% 效率，与在线同规则减员） =====
 function farmOutput() {
@@ -493,6 +563,7 @@ const EVENTS = [
 
 function fireEvent() {
   if (document.querySelector(".modal")) return;   // 上一个事件还没选
+  sfx.chime();
   const ev = EVENTS[Math.floor(Math.random() * EVENTS.length)];
   const mask = document.createElement("div");
   mask.className = "modal";
@@ -515,6 +586,7 @@ function harvestPlot(i, manual) {
   if (!p.ready) return;
   S.stats.harvest++;
   const bonus = manual ? 1.5 : 1;
+  if (manual) sfx.harvest();
   S.food += 3 * bonus * radMult();
   p.ready = false; p.planted = false; p.progress = 0;
 }
@@ -603,6 +675,7 @@ function sendMission(zi) {
   const present = S.jobs.scav - awayCount();
   if (S.squadSize > present) { log(`营内拾荒者不够：需要 ${S.squadSize} 人，现在只有 ${present} 人`, "bad"); return; }
   S.missions.push({ zone: zi, scouts: S.squadSize, endAt: Date.now() + 20 * 1000 });
+  sfx.mission();
   log(`派出 ${S.squadSize} 名拾荒者前往${z.name}……`, "good");
 }
 
@@ -614,6 +687,7 @@ function resolveMissions() {
     const z = ZONES[m.zone];
     const risk = Math.max(0.03, (z.risk - m.scouts * 0.08 - (S.shop && S.shop.dog ? 0.10 : 0)) * (1 - S.lv.radio * 0.05));
     if (Math.random() < risk) {
+      sfx.bad();
       S.survivor--;
       S.stats.deaths++;
       S.jobs.scav = Math.max(0, S.jobs.scav - 1);
@@ -623,6 +697,7 @@ function resolveMissions() {
       const mult = (1 + 0.5 * (m.scouts - 1)) * (1 + S.lv.radio * 0.25) * (S.shop && S.shop.pack ? 1.3 : 1) * radMult();
       const g = Math.floor((z.gain[0] + Math.random() * (z.gain[1] - z.gain[0])) * mult);
       const roll = Math.random();
+      sfx.good();
       if (roll < 0.4) { S.food += g; log(`${z.name}：远征队带回 ${g} 🥫 罐头`, "good"); }
       else if (roll < 0.7) { S.water += g; log(`${z.name}：远征队带回 ${g} 💧 净水`, "good"); }
       else { S.scrap += g; log(`${z.name}：远征队带回 ${g} ⚙️ 废料`, "good"); }
@@ -666,6 +741,7 @@ document.getElementById("prestige-btn").addEventListener("click", () => {
   if (S.food < 100 || S.scrap < 100) return;
   const gained = Math.floor(Math.sqrt(S.scrap) / 5) + 1;
   if (!confirm(`迁徙将清空资源与设施，但获得 ${gained} 辐尘（永久 +${gained * 10}% 产出）。确认出发？`)) return;
+  sfx.prestige();
   S.rad += gained; S.run++; S.day = 1;
   S.survivor = 3; S.food = 60; S.water = 60; S.scrap = 20;
   S.jobs = { farmer: 1, well: 1, scav: 1 };
@@ -702,6 +778,7 @@ function checkAchievements() {
     if (!S.ach[a.id] && a.cond()) {
       S.ach[a.id] = true;
       S.rad += 1;
+      sfx.ach();
       log(`🏆 达成成就「${a.name}」：${a.desc}（+1 辐尘）`, "good");
     }
   }
@@ -797,6 +874,13 @@ function showChronicle() {
   document.body.appendChild(mask);
 }
 document.getElementById("chron-btn").addEventListener("click", e => { e.preventDefault(); showChronicle(); });
+document.getElementById("snd-btn").addEventListener("click", e => {
+  e.preventDefault();
+  S.sound = !S.sound;
+  if (!S.sound) { if (AC) AC.suspend(); }
+  else { audioInit(); if (AC && AC.state === "suspended") AC.resume(); }
+  render();
+});
 
 // ===== 新手引导 =====
 const TUTORIAL_STEPS = [
@@ -909,6 +993,7 @@ function render() {
   const present = S.jobs.scav - away;
   document.getElementById("exp-info").textContent = `营内拾荒者 ${Math.max(0, present)} 人 · 外派 ${away} 人`;
   document.getElementById("shop-rad").textContent = S.rad;
+  document.getElementById("snd-btn").textContent = S.sound ? "🔊" : "🔇";
   document.getElementById("sq-1").classList.toggle("on", S.squadSize === 1);
   document.getElementById("sq-2").classList.toggle("on", S.squadSize === 2);
   document.querySelectorAll("[data-zone]").forEach(btn => {
