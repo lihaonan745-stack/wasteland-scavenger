@@ -141,7 +141,7 @@
 <body>
 <div class="header">
   <h1>废土拾荒<span class="cursor">▌</span></h1>
-  <div class="sysline">WASTELAND-OS // SURVIVOR TERMINAL v1.8</div>
+  <div class="sysline">WASTELAND-OS // SURVIVOR TERMINAL v1.9</div>
 </div>
 <div class="day">第 <span id="day">1</span> 天 · 第 <span id="run">1</span> 次轮回 · 辐尘 <span id="rad">0</span> · <a href="#" id="ach-btn">成就</a> · <a href="#" id="chron-btn">编年史</a> · <a href="#" id="snd-btn">🔊</a> · <a href="#" id="reset">重开</a></div>
 
@@ -287,7 +287,7 @@ function audioInit() {
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = AC.createGain();
-    masterGain.gain.value = 0.6;
+    masterGain.gain.value = 0.8;
     masterGain.connect(AC.destination);
     startBGM();
   } catch (e) {}
@@ -306,25 +306,39 @@ function beep(freq, dur, type, vol, when = 0, slideTo = 0) {
   o.start(t); o.stop(t + dur + 0.05);
 }
 function startBGM() {
-  // 低频 drone：两只微失谐锯齿波过低通，慢 LFO 呼吸
-  const filt = AC.createBiquadFilter(); filt.type = "lowpass"; filt.frequency.value = 320; filt.Q.value = 0.8;
-  const dg = AC.createGain(); dg.gain.value = 0.10;
-  const o1 = AC.createOscillator(); o1.type = "sawtooth"; o1.frequency.value = 55;
-  const o2 = AC.createOscillator(); o2.type = "sawtooth"; o2.frequency.value = 55.6;
-  o1.connect(filt); o2.connect(filt); filt.connect(dg); dg.connect(masterGain);
-  o1.start(); o2.start();
-  const lfo = AC.createOscillator(); lfo.frequency.value = 0.06;
-  const lg = AC.createGain(); lg.gain.value = 100;
-  lfo.connect(lg); lg.connect(filt.frequency); lfo.start();
-  // A 小调五声随机拨弦，稀疏落雨感
-  const scale = [220, 261.6, 293.7, 329.6, 392, 440, 523.3];
-  (function pluck() {
-    if (S.sound && !document.hidden) {
-      const f = scale[Math.floor(Math.random() * scale.length)];
-      beep(f, 1.8, "triangle", 0.11);
-      if (Math.random() < 0.3) beep(f * 1.5, 1.4, "triangle", 0.055, 0.45);
+  // 温柔循环曲：Am-F-C-G，84BPM，三角波琶音 + 正弦低音
+  const BPM = 84, beat = 60 / BPM;
+  const prog = [
+    { root: 110.0, arp: [220.0, 261.6, 329.6, 440.0] },   // Am
+    { root: 87.31, arp: [174.6, 220.0, 261.6, 349.2] },   // F
+    { root: 130.8, arp: [196.0, 261.6, 329.6, 392.0] },   // C
+    { root: 98.0,  arp: [196.0, 246.9, 293.7, 392.0] },   // G
+  ];
+  let bar = 0, nextBarTime = AC.currentTime + 0.2;
+  function note(freq, t, dur, vol, type) {
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(masterGain);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+  function scheduleBar(t, ch, barIdx) {
+    note(ch.root, t, beat * 2.2, 0.17, "sine");              // 强拍低音
+    note(ch.root, t + beat * 2, beat * 1.8, 0.13, "sine");   // 次强拍低音
+    const pat = [0, 1, 2, 3, 2, 1, 0, 2];                    // 八分音符琶音
+    pat.forEach((pi, i) => {
+      const up = (barIdx % 4 === 3 && i === 7) ? 2 : 1;      // 每轮末小节收一个高八度
+      note(ch.arp[pi] * up, t + i * beat * 0.5, beat * 0.55, 0.11, "triangle");
+    });
+  }
+  (function loop() {
+    while (nextBarTime < AC.currentTime + 1.2) {
+      scheduleBar(nextBarTime, prog[bar % 4], bar);
+      bar++; nextBarTime += beat * 4;
     }
-    setTimeout(pluck, 2200 + Math.random() * 3500);
+    setTimeout(loop, 300);
   })();
 }
 const sfx = {
