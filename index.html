@@ -141,7 +141,7 @@
 <body>
 <div class="header">
   <h1>废土拾荒<span class="cursor">▌</span></h1>
-  <div class="sysline">WASTELAND-OS // SURVIVOR TERMINAL v1.9</div>
+  <div class="sysline">WASTELAND-OS // SURVIVOR TERMINAL v2.0</div>
 </div>
 <div class="day">第 <span id="day">1</span> 天 · 第 <span id="run">1</span> 次轮回 · 辐尘 <span id="rad">0</span> · <a href="#" id="ach-btn">成就</a> · <a href="#" id="chron-btn">编年史</a> · <a href="#" id="snd-btn">🔊</a> · <a href="#" id="reset">重开</a></div>
 
@@ -287,7 +287,7 @@ function audioInit() {
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = AC.createGain();
-    masterGain.gain.value = 0.8;
+    masterGain.gain.value = 0.9;
     masterGain.connect(AC.destination);
     startBGM();
   } catch (e) {}
@@ -306,15 +306,28 @@ function beep(freq, dur, type, vol, when = 0, slideTo = 0) {
   o.start(t); o.stop(t + dur + 0.05);
 }
 function startBGM() {
-  // 温柔循环曲：Am-F-C-G，84BPM，三角波琶音 + 正弦低音
-  const BPM = 84, beat = 60 / BPM;
-  const prog = [
-    { root: 110.0, arp: [220.0, 261.6, 329.6, 440.0] },   // Am
-    { root: 87.31, arp: [174.6, 220.0, 261.6, 349.2] },   // F
-    { root: 130.8, arp: [196.0, 261.6, 329.6, 392.0] },   // C
-    { root: 98.0,  arp: [196.0, 246.9, 293.7, 392.0] },   // G
+  // 田园风循环曲：C大调 112BPM，主题旋律 + 低音 + 和弦垫（星露谷式轻快）
+  const BPM = 112, beat = 60 / BPM;
+  const f = { C4:261.63, D4:293.66, E4:329.63, F4:349.23, G4:392.00, A4:440.00, B4:493.88,
+              C5:523.25, D5:587.33, E5:659.26 };
+  // 8 小节主题（每小节 8 个八分音符槽，0=休止）
+  const MELODY = [
+    [f.G4,f.E4,f.C4,f.E4, f.G4,0,f.G4,0],
+    [f.D4,f.G4,f.B4,f.G4, f.D5,0,f.B4,0],
+    [f.C5,f.A4,f.E4,f.A4, f.C5,0,f.B4,f.A4],
+    [f.A4,f.G4,f.F4,f.G4, f.A4,0,f.F4,0],
+    [f.G4,f.E4,f.C4,f.E4, f.G4,0,f.A4,f.B4],
+    [f.D5,f.B4,f.G4,f.B4, f.D5,0,f.C5,f.B4],
+    [f.C5,f.E5,f.D5,f.C5, f.A4,0,f.C5,0],
+    [f.F4,f.G4,f.A4,f.B4, f.C5,0,0,0],
   ];
-  let bar = 0, nextBarTime = AC.currentTime + 0.2;
+  const BASS_ROOT  = [130.81, 98.00, 110.00, 87.31, 130.81, 98.00, 110.00, 98.00]; // C G Am F...
+  const BASS_FIFTH = [196.00, 146.83, 164.81, 130.81, 196.00, 146.83, 164.81, 146.83];
+  const PAD = [
+    [261.63, 329.63, 392.00], [246.94, 293.66, 392.00],
+    [220.00, 261.63, 329.63], [174.61, 220.00, 261.63],
+  ];
+  let bar = 0, nextBarTime = AC.currentTime + 0.15;
   function note(freq, t, dur, vol, type) {
     const o = AC.createOscillator(), g = AC.createGain();
     o.type = type; o.frequency.value = freq;
@@ -324,18 +337,19 @@ function startBGM() {
     o.connect(g); g.connect(masterGain);
     o.start(t); o.stop(t + dur + 0.05);
   }
-  function scheduleBar(t, ch, barIdx) {
-    note(ch.root, t, beat * 2.2, 0.17, "sine");              // 强拍低音
-    note(ch.root, t + beat * 2, beat * 1.8, 0.13, "sine");   // 次强拍低音
-    const pat = [0, 1, 2, 3, 2, 1, 0, 2];                    // 八分音符琶音
-    pat.forEach((pi, i) => {
-      const up = (barIdx % 4 === 3 && i === 7) ? 2 : 1;      // 每轮末小节收一个高八度
-      note(ch.arp[pi] * up, t + i * beat * 0.5, beat * 0.55, 0.11, "triangle");
-    });
+  function scheduleBar(t, bi) {
+    const m = MELODY[bi % 8];
+    const ci = [0,1,2,3,0,1,2,3][bi % 8];
+    for (let i = 0; i < 8; i++) {
+      if (m[i]) note(m[i], t + i * beat * 0.5, beat * 0.5, 0.14, "triangle");   // 主题旋律
+    }
+    note(BASS_ROOT[ci], t, beat * 1.6, 0.16, "sine");                           // 强拍低音
+    note(BASS_FIFTH[ci], t + beat * 2, beat * 1.4, 0.12, "sine");               // 次强拍五音
+    PAD[ci].forEach(fr => note(fr, t, beat * 3.8, 0.045, "sine"));              // 和弦垫
   }
   (function loop() {
     while (nextBarTime < AC.currentTime + 1.2) {
-      scheduleBar(nextBarTime, prog[bar % 4], bar);
+      scheduleBar(nextBarTime, bar);
       bar++; nextBarTime += beat * 4;
     }
     setTimeout(loop, 300);
