@@ -141,7 +141,7 @@
 <body>
 <div class="header">
   <h1>废土拾荒<span class="cursor">▌</span></h1>
-  <div class="sysline">WASTELAND-OS // SURVIVOR TERMINAL v2.0</div>
+  <div class="sysline">WASTELAND-OS // SURVIVOR TERMINAL v2.0.1</div>
 </div>
 <div class="day">第 <span id="day">1</span> 天 · 第 <span id="run">1</span> 次轮回 · 辐尘 <span id="rad">0</span> · <a href="#" id="ach-btn">成就</a> · <a href="#" id="chron-btn">编年史</a> · <a href="#" id="snd-btn">🔊</a> · <a href="#" id="reset">重开</a></div>
 
@@ -660,10 +660,11 @@ document.getElementById("draw-water").onclick = () => {
 
 // ===== 人员分配 =====
 function clampJobs() {
-  // 死人后保证岗位总数 <= 人数
+  // 死人后保证岗位总数 <= 人数；优先裁"人在营里"的岗位，外派中的拾荒者不背锅
   const order = ["scav", "well", "farmer"];
   while (S.jobs.farmer + S.jobs.well + S.jobs.scav > S.survivor) {
-    const k = order.find(k => S.jobs[k] > 0);
+    let k = order.find(j => S.jobs[j] > 0 && (j !== "scav" || S.jobs.scav > awayCount()));
+    if (!k) k = order.find(j => S.jobs[j] > 0);
     if (!k) break;
     S.jobs[k]--;
   }
